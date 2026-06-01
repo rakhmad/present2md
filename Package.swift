@@ -21,7 +21,7 @@ let package = Package(
             name: "present2mdTests",
             dependencies: ["present2mdCore"],
             path: "present2mdTests",
-            resources: [.copy("../Tests/Fixtures")]
+            resources: [.copy("Fixtures")]
         ),
         .testTarget(
             name: "present2mdIntegrationTests",
