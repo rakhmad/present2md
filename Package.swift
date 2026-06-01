@@ -20,7 +20,8 @@ let package = Package(
         .executableTarget(
             name: "present2mdApp",
             dependencies: ["present2mdCore"],
-            path: "present2mdApp"
+            path: "present2mdApp",
+            resources: [.process("Assets.xcassets")]
         ),
         .testTarget(
             name: "present2mdTests",
