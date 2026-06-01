@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import present2mdCore
 
 struct FileRowView: View {
     let job: ConversionJob

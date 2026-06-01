@@ -1,5 +1,4 @@
 import SwiftUI
-import present2mdCore
 
 struct FileListView: View {
     @EnvironmentObject var coordinator: ConversionCoordinator

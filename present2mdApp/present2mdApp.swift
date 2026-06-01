@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import present2mdCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {

@@ -1,106 +1,118 @@
 #!/usr/bin/env python3
-"""Generates present2md.xcodeproj — a minimal Xcode app project that
-wraps present2mdApp/ sources and depends on the local present2mdCore SPM package."""
+"""Generates present2md.xcodeproj — a macOS app target that compiles
+present2md/ (core) and present2mdApp/ (UI) together, linking ZIPFoundation
+via a remote SPM dependency. No local package reference needed."""
 
 import os, textwrap
 
-ROOT = "/Users/razhari/tmp/present2md"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJ = os.path.join(ROOT, "present2md.xcodeproj")
 WS   = os.path.join(PROJ, "project.xcworkspace")
 
-# ── Deterministic object IDs ─────────────────────────────────────────────────
+# ── Object IDs ────────────────────────────────────────────────────────────────
+def uid(n): return f"AA{n:022X}"
+
 R = {
-    "root":            "AA000001000000000000000A",
-    "main_group":      "AA000001000000000000000B",
-    "src_group":       "AA000001000000000000000C",
-    "fw_group":        "AA000001000000000000000D",
-    "prod_group":      "AA000001000000000000000E",
-    "target":          "AA000001000000000000001A",
-    "src_phase":       "AA000001000000000000001B",
-    "res_phase":       "AA000001000000000000001C",
-    "fw_phase":        "AA000001000000000000001D",
-    "proj_cfglist":    "AA000001000000000000002A",
-    "proj_debug":      "AA000001000000000000002B",
-    "proj_release":    "AA000001000000000000002C",
-    "tgt_cfglist":     "AA000001000000000000002D",
-    "tgt_debug":       "AA000001000000000000002E",
-    "tgt_release":     "AA000001000000000000002F",
-    # source file refs
-    "ref_app":         "AA000001000000000000003A",
-    "ref_content":     "AA000001000000000000003B",
-    "ref_empty":       "AA000001000000000000003C",
-    "ref_filelist":    "AA000001000000000000003D",
-    "ref_filerow":     "AA000001000000000000003E",
-    "ref_timeout":     "AA000001000000000000003F",
-    "ref_assets":      "AA000001000000000000004A",
-    "ref_infoplist":   "AA000001000000000000004B",
-    "ref_product":     "AA000001000000000000004C",
-    # build file entries
-    "bf_app":          "AA000001000000000000005A",
-    "bf_content":      "AA000001000000000000005B",
-    "bf_empty":        "AA000001000000000000005C",
-    "bf_filelist":     "AA000001000000000000005D",
-    "bf_filerow":      "AA000001000000000000005E",
-    "bf_timeout":      "AA000001000000000000005F",
-    "bf_assets":       "AA000001000000000000006A",
-    # SPM
-    "pkg_ref":         "AA000001000000000000007A",
-    "pkg_dep":         "AA000001000000000000007B",
-    "bf_pkgcore":      "AA000001000000000000007C",
+    "root":          uid(1),
+    "main_group":    uid(2),
+    "core_group":    uid(3),
+    "app_group":     uid(4),
+    "fw_group":      uid(5),
+    "prod_group":    uid(6),
+    "target":        uid(0x10),
+    "src_phase":     uid(0x11),
+    "res_phase":     uid(0x12),
+    "fw_phase":      uid(0x13),
+    "proj_cfglist":  uid(0x20),
+    "proj_debug":    uid(0x21),
+    "proj_release":  uid(0x22),
+    "tgt_cfglist":   uid(0x23),
+    "tgt_debug":     uid(0x24),
+    "tgt_release":   uid(0x25),
+    "ref_assets":    uid(0x40),
+    "ref_infoplist": uid(0x41),
+    "ref_product":   uid(0x42),
+    "bf_assets":     uid(0x50),
+    "pkg_ref":       uid(0x60),  # XCRemoteSwiftPackageReference
+    "pkg_dep":       uid(0x61),  # XCSwiftPackageProductDependency
+    "bf_zip":        uid(0x62),  # build file for ZIPFoundation
 }
 
-SOURCE_FILES = [
-    ("ref_app",      "bf_app",      "present2mdApp.swift"),
-    ("ref_content",  "bf_content",  "ContentView.swift"),
-    ("ref_empty",    "bf_empty",    "EmptyStateView.swift"),
-    ("ref_filelist", "bf_filelist", "FileListView.swift"),
-    ("ref_filerow",  "bf_filerow",  "FileRowView.swift"),
-    ("ref_timeout",  "bf_timeout",  "TimeoutAlertView.swift"),
+# Core library source files
+CORE_FILES = [
+    ("Converters/FileConverter.swift",),
+    ("Converters/ODSConverter.swift",),
+    ("Converters/PDFConverter.swift",),
+    ("Converters/PPTXConverter.swift",),
+    ("Coordinator/ConversionCoordinator.swift",),
+    ("Model/ConversionJob.swift",),
+    ("Model/Slide.swift",),
+    ("Model/SlideBlock.swift",),
+    ("Serializer/MarkdownSerializer.swift",),
+    ("Utilities/FilenameConverter.swift",),
 ]
 
+# App layer source files
+APP_FILES = [
+    ("present2mdApp.swift",),
+    ("ContentView.swift",),
+    ("EmptyStateView.swift",),
+    ("FileListView.swift",),
+    ("FileRowView.swift",),
+    ("TimeoutAlertView.swift",),
+]
+
+# Assign UIDs to each file
+for i, row in enumerate(CORE_FILES):
+    base = 0x100 + i
+    R[f"core_ref_{i}"] = uid(base)
+    R[f"core_bf_{i}"]  = uid(base + 0x80)
+
+for i, row in enumerate(APP_FILES):
+    base = 0x200 + i
+    R[f"app_ref_{i}"] = uid(base)
+    R[f"app_bf_{i}"]  = uid(base + 0x80)
+
+
 def pbxproj():
-    src_file_refs = "\n".join(
-        f'\t\t{R[ref]} = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; '
-        f'name = "{name}"; path = "present2mdApp/{name}"; sourceTree = "<group>"; }};'
-        for ref, _, name in SOURCE_FILES
+    # ── File references ────────────────────────────────────────────────────
+    core_refs = "\n".join(
+        f'\t\t{R[f"core_ref_{i}"]} = {{isa = PBXFileReference; '
+        f'lastKnownFileType = sourcecode.swift; '
+        f'name = "{row[0].split("/")[-1]}"; '
+        f'path = "present2md/{row[0]}"; sourceTree = "<group>"; }};'
+        for i, row in enumerate(CORE_FILES)
     )
-    src_build_files = "\n".join(
-        f'\t\t{R[bf]} = {{isa = PBXBuildFile; fileRef = {R[ref]}; }};'
-        for ref, bf, _ in SOURCE_FILES
+    app_refs = "\n".join(
+        f'\t\t{R[f"app_ref_{i}"]} = {{isa = PBXFileReference; '
+        f'lastKnownFileType = sourcecode.swift; '
+        f'name = "{row[0]}"; '
+        f'path = "present2mdApp/{row[0]}"; sourceTree = "<group>"; }};'
+        for i, row in enumerate(APP_FILES)
     )
-    src_phase_files = " ".join(f"{R[bf]}," for _, bf, _ in SOURCE_FILES)
-    src_group_children = " ".join(f"{R[ref]}," for ref, _, _ in SOURCE_FILES)
 
-    common_settings = """\
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				COPY_PHASE_STRIP = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.9;"""
+    # ── Build files ────────────────────────────────────────────────────────
+    core_bfs = "\n".join(
+        f'\t\t{R[f"core_bf_{i}"]} = {{isa = PBXBuildFile; fileRef = {R[f"core_ref_{i}"]}; }};'
+        for i in range(len(CORE_FILES))
+    )
+    app_bfs = "\n".join(
+        f'\t\t{R[f"app_bf_{i}"]} = {{isa = PBXBuildFile; fileRef = {R[f"app_ref_{i}"]}; }};'
+        for i in range(len(APP_FILES))
+    )
 
-    release_settings = """\
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				COPY_PHASE_STRIP = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.9;"""
+    # ── Phase file lists ───────────────────────────────────────────────────
+    all_src_bfs = (
+        " ".join(f"{R[f'core_bf_{i}']}," for i in range(len(CORE_FILES))) + "\n\t\t\t\t" +
+        " ".join(f"{R[f'app_bf_{i}']}," for i in range(len(APP_FILES)))
+    )
 
-    tgt_debug = """\
+    # ── Group children ─────────────────────────────────────────────────────
+    core_children = " ".join(f"{R[f'core_ref_{i}']}," for i in range(len(CORE_FILES)))
+    app_children  = " ".join(f"{R[f'app_ref_{i}']}," for i in range(len(APP_FILES)))
+
+    tgt_settings = """\
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				BUNDLE_LOADER = "";
-				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -114,10 +126,23 @@ def pbxproj():
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;"""
 
-    tgt_release = tgt_debug.replace(
-        "CURRENT_PROJECT_VERSION = 1;",
-        "CURRENT_PROJECT_VERSION = 1;\n\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = \"-O\";"
-    )
+    proj_debug = """\
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;"""
+
+    proj_release = """\
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;"""
 
     return textwrap.dedent(f"""\
 // !$*UTF8*$!
@@ -129,25 +154,25 @@ def pbxproj():
 \tobjects = {{
 
 /* Begin PBXBuildFile section */
-{src_build_files}
+{core_bfs}
+{app_bfs}
 \t\t{R["bf_assets"]} = {{isa = PBXBuildFile; fileRef = {R["ref_assets"]}; }};
-\t\t{R["bf_pkgcore"]} = {{isa = PBXBuildFile; productRef = {R["pkg_dep"]}; }};
+\t\t{R["bf_zip"]}    = {{isa = PBXBuildFile; productRef = {R["pkg_dep"]}; }};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-{src_file_refs}
-\t\t{R["ref_assets"]} = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "present2mdApp/Assets.xcassets"; sourceTree = "<group>"; }};
+{core_refs}
+{app_refs}
+\t\t{R["ref_assets"]}    = {{isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "present2mdApp/Assets.xcassets"; sourceTree = "<group>"; }};
 \t\t{R["ref_infoplist"]} = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "present2mdApp/Info.plist"; sourceTree = "<group>"; }};
-\t\t{R["ref_product"]} = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "present2md.app"; sourceTree = BUILT_PRODUCTS_DIR; }};
+\t\t{R["ref_product"]}   = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "present2md.app"; sourceTree = BUILT_PRODUCTS_DIR; }};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 \t\t{R["fw_phase"]} = {{
 \t\t\tisa = PBXFrameworksBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
-\t\t\tfiles = (
-\t\t\t\t{R["bf_pkgcore"]},
-\t\t\t);
+\t\t\tfiles = ({R["bf_zip"]},);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
 /* End PBXFrameworksBuildPhase section */
@@ -155,34 +180,25 @@ def pbxproj():
 /* Begin PBXGroup section */
 \t\t{R["main_group"]} = {{
 \t\t\tisa = PBXGroup;
-\t\t\tchildren = (
-\t\t\t\t{R["src_group"]},
-\t\t\t\t{R["fw_group"]},
-\t\t\t\t{R["prod_group"]},
-\t\t\t);
+\t\t\tchildren = ({R["core_group"]}, {R["app_group"]}, {R["fw_group"]}, {R["prod_group"]},);
 \t\t\tsourceTree = "<group>";
 \t\t}};
-\t\t{R["src_group"]} = {{
+\t\t{R["core_group"]} = {{
 \t\t\tisa = PBXGroup;
-\t\t\tchildren = (
-\t\t\t\t{src_group_children}
-\t\t\t\t{R["ref_assets"]},
-\t\t\t\t{R["ref_infoplist"]},
-\t\t\t);
+\t\t\tchildren = ({core_children});
+\t\t\tname = "present2md (Core)";
+\t\t\tsourceTree = "<group>";
+\t\t}};
+\t\t{R["app_group"]} = {{
+\t\t\tisa = PBXGroup;
+\t\t\tchildren = ({app_children} {R["ref_assets"]}, {R["ref_infoplist"]},);
 \t\t\tname = "present2mdApp";
 \t\t\tsourceTree = "<group>";
 \t\t}};
-\t\t{R["fw_group"]} = {{
-\t\t\tisa = PBXGroup;
-\t\t\tchildren = ();
-\t\t\tname = Frameworks;
-\t\t\tsourceTree = "<group>";
-\t\t}};
+\t\t{R["fw_group"]}   = {{isa = PBXGroup; children = (); name = Frameworks; sourceTree = "<group>"; }};
 \t\t{R["prod_group"]} = {{
 \t\t\tisa = PBXGroup;
-\t\t\tchildren = (
-\t\t\t\t{R["ref_product"]},
-\t\t\t);
+\t\t\tchildren = ({R["ref_product"]},);
 \t\t\tname = Products;
 \t\t\tsourceTree = "<group>";
 \t\t}};
@@ -192,17 +208,11 @@ def pbxproj():
 \t\t{R["target"]} = {{
 \t\t\tisa = PBXNativeTarget;
 \t\t\tbuildConfigurationList = {R["tgt_cfglist"]};
-\t\t\tbuildPhases = (
-\t\t\t\t{R["src_phase"]},
-\t\t\t\t{R["fw_phase"]},
-\t\t\t\t{R["res_phase"]},
-\t\t\t);
+\t\t\tbuildPhases = ({R["src_phase"]}, {R["fw_phase"]}, {R["res_phase"]},);
 \t\t\tbuildRules = ();
 \t\t\tdependencies = ();
 \t\t\tname = present2md;
-\t\t\tpackageProductDependencies = (
-\t\t\t\t{R["pkg_dep"]},
-\t\t\t);
+\t\t\tpackageProductDependencies = ({R["pkg_dep"]},);
 \t\t\tproductName = present2md;
 \t\t\tproductReference = {R["ref_product"]};
 \t\t\tproductType = "com.apple.product-type.application";
@@ -212,26 +222,18 @@ def pbxproj():
 /* Begin PBXProject section */
 \t\t{R["root"]} = {{
 \t\t\tisa = PBXProject;
-\t\t\tattributes = {{
-\t\t\t\tBuildIndependentTargetsInParallel = 1;
-\t\t\t\tLastSwiftUpdateCheck = 1500;
-\t\t\t\tLastUpgradeCheck = 1500;
-\t\t\t}};
+\t\t\tattributes = {{BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 1500; LastUpgradeCheck = 1500; }};
 \t\t\tbuildConfigurationList = {R["proj_cfglist"]};
 \t\t\tcompatibilityVersion = "Xcode 14.0";
 \t\t\tdevelopmentRegion = en;
 \t\t\thasScannedForEncodings = 0;
 \t\t\tknownRegions = (en, Base);
 \t\t\tmainGroup = {R["main_group"]};
-\t\t\tpackageReferences = (
-\t\t\t\t{R["pkg_ref"]},
-\t\t\t);
+\t\t\tpackageReferences = ({R["pkg_ref"]},);
 \t\t\tproductRefGroup = {R["prod_group"]};
 \t\t\tprojectDirPath = "";
 \t\t\tprojectRoot = "";
-\t\t\ttargets = (
-\t\t\t\t{R["target"]},
-\t\t\t);
+\t\t\ttargets = ({R["target"]},);
 \t\t}};
 /* End PBXProject section */
 
@@ -239,9 +241,7 @@ def pbxproj():
 \t\t{R["res_phase"]} = {{
 \t\t\tisa = PBXResourcesBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
-\t\t\tfiles = (
-\t\t\t\t{R["bf_assets"]},
-\t\t\t);
+\t\t\tfiles = ({R["bf_assets"]},);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
 /* End PBXResourcesBuildPhase section */
@@ -250,78 +250,40 @@ def pbxproj():
 \t\t{R["src_phase"]} = {{
 \t\t\tisa = PBXSourcesBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
-\t\t\tfiles = (
-\t\t\t\t{src_phase_files}
-\t\t\t);
+\t\t\tfiles = ({all_src_bfs});
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-\t\t{R["proj_debug"]} = {{
-\t\t\tisa = XCBuildConfiguration;
-\t\t\tbuildSettings = {{
-{common_settings}
-\t\t\t}};
-\t\t\tname = Debug;
-\t\t}};
-\t\t{R["proj_release"]} = {{
-\t\t\tisa = XCBuildConfiguration;
-\t\t\tbuildSettings = {{
-{release_settings}
-\t\t\t}};
-\t\t\tname = Release;
-\t\t}};
-\t\t{R["tgt_debug"]} = {{
-\t\t\tisa = XCBuildConfiguration;
-\t\t\tbuildSettings = {{
-{tgt_debug}
-\t\t\t}};
-\t\t\tname = Debug;
-\t\t}};
-\t\t{R["tgt_release"]} = {{
-\t\t\tisa = XCBuildConfiguration;
-\t\t\tbuildSettings = {{
-{tgt_release}
-\t\t\t}};
-\t\t\tname = Release;
-\t\t}};
+\t\t{R["proj_debug"]}   = {{isa = XCBuildConfiguration; buildSettings = {{{proj_debug}\n\t\t\t}}; name = Debug; }};
+\t\t{R["proj_release"]} = {{isa = XCBuildConfiguration; buildSettings = {{{proj_release}\n\t\t\t}}; name = Release; }};
+\t\t{R["tgt_debug"]}    = {{isa = XCBuildConfiguration; buildSettings = {{{tgt_settings}\n\t\t\t}}; name = Debug; }};
+\t\t{R["tgt_release"]}  = {{isa = XCBuildConfiguration; buildSettings = {{{tgt_settings}\n\t\t\t}}; name = Release; }};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-\t\t{R["proj_cfglist"]} = {{
-\t\t\tisa = XCConfigurationList;
-\t\t\tbuildConfigurations = ({R["proj_debug"]}, {R["proj_release"]}, );
-\t\t\tdefaultConfigurationIsVisible = 0;
-\t\t\tdefaultConfigurationName = Release;
-\t\t}};
-\t\t{R["tgt_cfglist"]} = {{
-\t\t\tisa = XCConfigurationList;
-\t\t\tbuildConfigurations = ({R["tgt_debug"]}, {R["tgt_release"]}, );
-\t\t\tdefaultConfigurationIsVisible = 0;
-\t\t\tdefaultConfigurationName = Release;
-\t\t}};
+\t\t{R["proj_cfglist"]} = {{isa = XCConfigurationList; buildConfigurations = ({R["proj_debug"]}, {R["proj_release"]},); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; }};
+\t\t{R["tgt_cfglist"]}  = {{isa = XCConfigurationList; buildConfigurations = ({R["tgt_debug"]},  {R["tgt_release"]}, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; }};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
+/* Begin XCRemoteSwiftPackageReference section */
 \t\t{R["pkg_ref"]} = {{
-\t\t\tisa = XCLocalSwiftPackageReference;
-\t\t\trelativePath = ".";
+\t\t\tisa = XCRemoteSwiftPackageReference;
+\t\t\trepositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+\t\t\trequirement = {{kind = upToNextMajorVersion; minimumVersion = "0.9.19"; }};
 \t\t}};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-\t\t{R["pkg_dep"]} = {{
-\t\t\tisa = XCSwiftPackageProductDependency;
-\t\t\tpackage = {R["pkg_ref"]};
-\t\t\tproductName = present2mdCore;
-\t\t}};
+\t\t{R["pkg_dep"]} = {{isa = XCSwiftPackageProductDependency; package = {R["pkg_ref"]}; productName = ZIPFoundation; }};
 /* End XCSwiftPackageProductDependency section */
 
 \t}};
 \trootObject = {R["root"]};
 }}
 """)
+
 
 def workspace_data():
     return textwrap.dedent("""\
@@ -332,6 +294,7 @@ def workspace_data():
 </Workspace>
 """)
 
+
 if __name__ == "__main__":
     os.makedirs(WS, exist_ok=True)
     with open(os.path.join(PROJ, "project.pbxproj"), "w") as f:
@@ -339,4 +302,4 @@ if __name__ == "__main__":
     with open(os.path.join(WS, "contents.xcworkspacedata"), "w") as f:
         f.write(workspace_data())
     print(f"Generated {PROJ}")
-    print("Open present2md.xcodeproj in Xcode, select the 'present2md' scheme, and run.")
+    print("Open present2md.xcodeproj, select the 'present2md' scheme, Cmd+R.")
