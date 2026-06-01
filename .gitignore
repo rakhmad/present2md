@@ -31,3 +31,5 @@ present2mdPerformanceTests/PerformanceFixtures/*.pptx
 .env
 *.pem
 present2md.xcodeproj/
+build/
+present2md.dmg
