@@ -17,6 +17,13 @@ struct ContentView: View {
             Divider()
             footer
         }
+        .dropDestination(for: URL.self) { urls, _ in
+            let filtered = urls.filter {
+                ["pdf", "pptx", "ods"].contains($0.pathExtension.lowercased())
+            }
+            if !filtered.isEmpty { coordinator.addJobs(urls: filtered) }
+            return !filtered.isEmpty
+        }
         .sheet(isPresented: Binding(
             get: { coordinator.timeoutJobID != nil },
             set: { _ in }
