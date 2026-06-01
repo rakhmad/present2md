@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "present2mdCore", targets: ["present2mdCore"]),
+        .executable(name: "present2mdApp", targets: ["present2mdApp"]),
     ],
     dependencies: [
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.19"),
@@ -14,8 +15,12 @@ let package = Package(
         .target(
             name: "present2mdCore",
             dependencies: ["ZIPFoundation"],
-            path: "present2md",
-            exclude: ["App", "UI"]
+            path: "present2md"
+        ),
+        .executableTarget(
+            name: "present2mdApp",
+            dependencies: ["present2mdCore"],
+            path: "present2mdApp"
         ),
         .testTarget(
             name: "present2mdTests",

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import present2mdCore
 
 struct ContentView: View {
     @EnvironmentObject var coordinator: ConversionCoordinator

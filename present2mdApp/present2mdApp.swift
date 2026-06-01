@@ -1,4 +1,5 @@
 import SwiftUI
+import present2mdCore
 
 @main
 struct present2mdApp: App {
