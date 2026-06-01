@@ -21,7 +21,10 @@ let package = Package(
             name: "present2mdApp",
             dependencies: ["present2mdCore"],
             path: "present2mdApp",
-            resources: [.process("Assets.xcassets")]
+            resources: [
+                .process("Assets.xcassets"),
+                .process("Info.plist")
+            ]
         ),
         .testTarget(
             name: "present2mdTests",
