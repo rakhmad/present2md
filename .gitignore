@@ -24,6 +24,8 @@ build/
 
 # Large test fixtures (download via scripts/download_test_fixtures.sh)
 Tests/PerformanceFixtures/
+present2mdPerformanceTests/PerformanceFixtures/*.pdf
+present2mdPerformanceTests/PerformanceFixtures/*.pptx
 
 # Credentials / env
 .env

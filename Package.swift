@@ -33,7 +33,7 @@ let package = Package(
             name: "present2mdPerformanceTests",
             dependencies: ["present2mdCore"],
             path: "present2mdPerformanceTests",
-            resources: [.copy("../Tests/PerformanceFixtures")]
+            resources: [.copy("PerformanceFixtures")]
         ),
     ]
 )
