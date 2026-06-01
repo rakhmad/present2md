@@ -30,3 +30,4 @@ present2mdPerformanceTests/PerformanceFixtures/*.pptx
 # Credentials / env
 .env
 *.pem
+present2md.xcodeproj/
